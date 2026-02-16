@@ -1,210 +1,204 @@
 "use client"
 
+import { useRef, useCallback } from "react"
+import { DotLottieReact } from "@lottiefiles/dotlottie-react"
 import { cn } from "@/lib/utils"
 import type { CosmeticSlot, AgentStatus } from "@/lib/agent-types"
 
-/** SVG-based layered agent avatar with cosmetic slots and status animations */
+/**
+ * Cloud Robotics Lottie avatar with cosmetic overlay slots and animated status ring.
+ *
+ * Replace LOTTIE_SRC with your own lottie.host CDN URL if needed.
+ * To get the URL: open the animation on lottiefiles.com -> "Asset & Embed" tab -> generate link.
+ */
+const LOTTIE_SRC =
+  "https://lottie.host/4db68bbd-31f6-4cd8-84eb-189de081159a/IGmMCqhzpt.lottie"
 
 interface AgentAvatarProps {
-  baseForm: "fire" | "robot" | "cat" | "pixel"
   equipped: Partial<Record<CosmeticSlot, string>>
   status: AgentStatus
   size?: "sm" | "md" | "lg"
   className?: string
 }
 
-const SIZE_MAP = { sm: 80, md: 120, lg: 180 }
+const SIZE_MAP = { sm: 80, md: 140, lg: 200 }
 
-const BASE_COLORS: Record<string, { body: string; accent: string }> = {
-  fire: { body: "#F97316", accent: "#FDBA74" },
-  robot: { body: "hsl(210 100% 45%)", accent: "hsl(210 100% 70%)" },
-  cat: { body: "#A78BFA", accent: "#DDD6FE" },
-  pixel: { body: "#10B981", accent: "#6EE7B7" },
+const STATUS_STYLES: Record<
+  AgentStatus,
+  { ring: string; label: string; dashArray?: string }
+> = {
+  idle: {
+    ring: "stroke-muted-foreground/20",
+    label: "idle",
+  },
+  thinking: {
+    ring: "stroke-primary",
+    label: "thinking",
+    dashArray: "10 5",
+  },
+  completed: {
+    ring: "stroke-success",
+    label: "completed",
+  },
+  failed: {
+    ring: "stroke-destructive",
+    label: "failed",
+  },
+  leveling_up: {
+    ring: "stroke-warning",
+    label: "leveling_up",
+  },
 }
 
-const STATUS_RING: Record<AgentStatus, string> = {
-  idle: "stroke-muted-foreground/30",
-  thinking: "stroke-primary animate-spin",
-  completed: "stroke-success",
-  failed: "stroke-destructive",
-  leveling_up: "stroke-warning animate-pulse",
+/* Aura colour mapping – maps the emoji icon to a real CSS colour */
+const AURA_COLORS: Record<string, string> = {
+  "\uD83D\uDD35": "rgba(59,130,246,0.18)",   // blue
+  "\uD83D\uDFE1": "rgba(234,179,8,0.16)",    // gold
+  "\uD83D\uDFE3": "rgba(168,85,247,0.16)",   // purple
 }
 
 export function AgentAvatar({
-  baseForm,
   equipped,
   status,
   size = "md",
   className,
 }: AgentAvatarProps) {
   const px = SIZE_MAP[size]
-  const colors = BASE_COLORS[baseForm]
+  const s = STATUS_STYLES[status]
+
+  const dotLottieRef = useRef<ReturnType<typeof DotLottieReact> | null>(null)
+
+  const handleDotLottieRef = useCallback(
+    (instance: unknown) => {
+      dotLottieRef.current = instance as ReturnType<typeof DotLottieReact>
+      // Slow down / pause based on status
+      if (instance && typeof (instance as Record<string, unknown>).setSpeed === "function") {
+        const player = instance as { setSpeed: (s: number) => void; pause: () => void; play: () => void }
+        if (status === "idle") player.setSpeed(0.6)
+        else if (status === "thinking") player.setSpeed(1.8)
+        else if (status === "failed") player.setSpeed(0.3)
+        else player.setSpeed(1)
+      }
+    },
+    [status]
+  )
+
+  const auraColor = equipped.aura ? (AURA_COLORS[equipped.aura] ?? "rgba(59,130,246,0.12)") : undefined
 
   return (
     <div
       className={cn("relative inline-flex items-center justify-center", className)}
       style={{ width: px, height: px }}
+      role="img"
+      aria-label="OpenClaw Agent avatar"
     >
-      {/* Status ring */}
+      {/* Outer status ring */}
       <svg
         className="absolute inset-0"
         viewBox="0 0 100 100"
         fill="none"
         aria-hidden="true"
       >
+        {/* Background track */}
+        <circle
+          cx="50"
+          cy="50"
+          r="47"
+          strokeWidth="1.5"
+          className="stroke-border"
+        />
+        {/* Animated ring */}
         <circle
           cx="50"
           cy="50"
           r="47"
           strokeWidth="2.5"
-          className={cn("transition-all duration-500", STATUS_RING[status])}
-          strokeDasharray={status === "thinking" ? "12 6" : undefined}
+          strokeLinecap="round"
+          className={cn(
+            "transition-all duration-500",
+            s.ring,
+            status === "thinking" && "animate-spin [animation-duration:3s]",
+            status === "leveling_up" && "animate-pulse"
+          )}
+          strokeDasharray={s.dashArray}
         />
       </svg>
 
-      {/* Base body */}
-      <svg
-        viewBox="0 0 100 100"
-        className="absolute inset-[10%]"
-        aria-label={`${baseForm} agent avatar`}
-      >
-        {/* Aura glow */}
-        {equipped.aura && (
-          <circle
-            cx="50"
-            cy="50"
-            r="44"
-            fill={equipped.aura}
-            opacity="0.15"
-            className={status === "leveling_up" ? "animate-pulse" : ""}
-          />
-        )}
+      {/* Aura glow layer */}
+      {auraColor && (
+        <div
+          className={cn(
+            "absolute inset-[8%] rounded-full blur-md",
+            status === "leveling_up" && "animate-pulse"
+          )}
+          style={{ backgroundColor: auraColor }}
+          aria-hidden="true"
+        />
+      )}
 
-        {/* Background plate */}
-        {equipped.background && (
-          <rect
-            x="10"
-            y="10"
-            width="80"
-            height="80"
-            rx="16"
-            fill={equipped.background}
-            opacity="0.1"
-          />
-        )}
+      {/* Background plate */}
+      {equipped.background && (
+        <div className="absolute inset-[12%] flex items-center justify-center rounded-2xl bg-muted/30" aria-hidden="true">
+          <span className="text-2xl opacity-20">{equipped.background}</span>
+        </div>
+      )}
 
-        {/* Main body shape */}
-        {baseForm === "fire" && (
-          <g>
-            <ellipse cx="50" cy="58" rx="22" ry="26" fill={colors.body} />
-            <ellipse cx="50" cy="56" rx="18" ry="20" fill={colors.accent} opacity="0.5" />
-            {/* Flame tips */}
-            <path
-              d="M38 38 C38 28 50 18 50 18 C50 18 62 28 62 38 C62 42 58 46 50 46 C42 46 38 42 38 38Z"
-              fill={colors.body}
-              className={status === "thinking" ? "animate-bounce" : ""}
-            />
-            {/* Eyes */}
-            <circle cx="42" cy="54" r="3" fill="hsl(var(--card))" />
-            <circle cx="58" cy="54" r="3" fill="hsl(var(--card))" />
-            <circle cx="43" cy="53" r="1.2" fill="hsl(var(--foreground))" />
-            <circle cx="59" cy="53" r="1.2" fill="hsl(var(--foreground))" />
-            {/* Mouth */}
-            {status === "completed" ? (
-              <path d="M44 62 Q50 68 56 62" stroke="hsl(var(--card))" strokeWidth="2" fill="none" strokeLinecap="round" />
-            ) : status === "failed" ? (
-              <path d="M44 66 Q50 60 56 66" stroke="hsl(var(--card))" strokeWidth="2" fill="none" strokeLinecap="round" />
-            ) : (
-              <ellipse cx="50" cy="63" rx="4" ry="2" fill="hsl(var(--card))" opacity="0.7" />
-            )}
-          </g>
-        )}
+      {/* Back cosmetic (behind avatar) */}
+      {equipped.back && (
+        <span
+          className="absolute z-0 text-xl opacity-60"
+          style={{
+            right: size === "lg" ? "10%" : "8%",
+            top: "30%",
+          }}
+          aria-hidden="true"
+        >
+          {equipped.back}
+        </span>
+      )}
 
-        {baseForm === "robot" && (
-          <g>
-            {/* Body */}
-            <rect x="30" y="40" width="40" height="36" rx="8" fill={colors.body} />
-            {/* Head */}
-            <rect x="32" y="22" width="36" height="28" rx="10" fill={colors.body} />
-            {/* Antenna */}
-            <line x1="50" y1="22" x2="50" y2="14" stroke={colors.accent} strokeWidth="2.5" strokeLinecap="round" />
-            <circle cx="50" cy="12" r="3" fill={colors.accent} className={status === "thinking" ? "animate-ping" : ""} />
-            {/* Eyes */}
-            <rect x="38" y="32" width="8" height="8" rx="2" fill="hsl(var(--card))" />
-            <rect x="54" y="32" width="8" height="8" rx="2" fill="hsl(var(--card))" />
-            <rect x="40" y="34" width="4" height="4" rx="1" fill="hsl(var(--foreground))" />
-            <rect x="56" y="34" width="4" height="4" rx="1" fill="hsl(var(--foreground))" />
-            {/* Mouth */}
-            <rect x="40" y="44" width="20" height="3" rx="1.5" fill={colors.accent} />
-            {/* Arms */}
-            <rect x="22" y="44" width="8" height="4" rx="2" fill={colors.accent} />
-            <rect x="70" y="44" width="8" height="4" rx="2" fill={colors.accent} />
-          </g>
-        )}
+      {/* Main Lottie avatar */}
+      <div className="relative z-10" style={{ width: px * 0.65, height: px * 0.65 }}>
+        <DotLottieReact
+          src={LOTTIE_SRC}
+          loop
+          autoplay
+          dotLottieRefCallback={handleDotLottieRef}
+          style={{ width: "100%", height: "100%" }}
+        />
+      </div>
 
-        {baseForm === "cat" && (
-          <g>
-            {/* Body */}
-            <ellipse cx="50" cy="60" rx="24" ry="22" fill={colors.body} />
-            {/* Ears */}
-            <path d="M30 44 L34 26 L42 40Z" fill={colors.body} />
-            <path d="M70 44 L66 26 L58 40Z" fill={colors.body} />
-            <path d="M33 42 L36 30 L41 40Z" fill={colors.accent} opacity="0.6" />
-            <path d="M67 42 L64 30 L59 40Z" fill={colors.accent} opacity="0.6" />
-            {/* Eyes */}
-            <ellipse cx="42" cy="54" rx="4" ry="4.5" fill="hsl(var(--card))" />
-            <ellipse cx="58" cy="54" rx="4" ry="4.5" fill="hsl(var(--card))" />
-            <ellipse cx="43" cy="54" rx="2" ry="2.5" fill="hsl(var(--foreground))" />
-            <ellipse cx="59" cy="54" rx="2" ry="2.5" fill="hsl(var(--foreground))" />
-            {/* Nose + Whiskers */}
-            <ellipse cx="50" cy="60" rx="2" ry="1.5" fill={colors.accent} />
-            <line x1="30" y1="58" x2="44" y2="60" stroke={colors.accent} strokeWidth="1" opacity="0.5" />
-            <line x1="30" y1="62" x2="44" y2="62" stroke={colors.accent} strokeWidth="1" opacity="0.5" />
-            <line x1="56" y1="60" x2="70" y2="58" stroke={colors.accent} strokeWidth="1" opacity="0.5" />
-            <line x1="56" y1="62" x2="70" y2="62" stroke={colors.accent} strokeWidth="1" opacity="0.5" />
-            {/* Tail */}
-            <path d="M74 62 Q82 50 78 40" stroke={colors.body} strokeWidth="4" fill="none" strokeLinecap="round"
-              className={status === "idle" ? "origin-bottom-left animate-[wiggle_2s_ease-in-out_infinite]" : ""}
-            />
-          </g>
-        )}
+      {/* Hat cosmetic (above avatar) */}
+      {equipped.hat && (
+        <span
+          className="absolute z-20"
+          style={{
+            top: size === "lg" ? "6%" : "8%",
+            left: "50%",
+            transform: "translateX(-50%)",
+            fontSize: size === "lg" ? "1.5rem" : size === "md" ? "1.25rem" : "1rem",
+          }}
+          aria-hidden="true"
+        >
+          {equipped.hat}
+        </span>
+      )}
 
-        {baseForm === "pixel" && (
-          <g>
-            {/* Blocky head */}
-            <rect x="30" y="24" width="40" height="36" rx="4" fill={colors.body} />
-            {/* Body */}
-            <rect x="34" y="60" width="32" height="20" rx="4" fill={colors.body} />
-            {/* Eyes */}
-            <rect x="38" y="36" width="6" height="6" fill="hsl(var(--card))" />
-            <rect x="56" y="36" width="6" height="6" fill="hsl(var(--card))" />
-            <rect x="39" y="37" width="4" height="4" fill="hsl(var(--foreground))" />
-            <rect x="57" y="37" width="4" height="4" fill="hsl(var(--foreground))" />
-            {/* Mouth */}
-            <rect x="42" y="48" width="16" height="4" rx="1" fill={colors.accent} />
-            {/* Feet */}
-            <rect x="36" y="78" width="10" height="6" rx="2" fill={colors.accent} />
-            <rect x="54" y="78" width="10" height="6" rx="2" fill={colors.accent} />
-          </g>
-        )}
-
-        {/* Cosmetic overlays */}
-        {equipped.hat && (
-          <text x="50" y="18" textAnchor="middle" fontSize="16" aria-hidden="true">
-            {equipped.hat}
-          </text>
-        )}
-        {equipped.face && (
-          <text x="50" y="52" textAnchor="middle" fontSize="10" aria-hidden="true">
-            {equipped.face}
-          </text>
-        )}
-        {equipped.back && (
-          <text x="78" y="50" textAnchor="middle" fontSize="12" aria-hidden="true">
-            {equipped.back}
-          </text>
-        )}
-      </svg>
+      {/* Face cosmetic (center overlay) */}
+      {equipped.face && (
+        <span
+          className="absolute z-20"
+          style={{
+            top: "40%",
+            left: "50%",
+            transform: "translateX(-50%)",
+            fontSize: size === "lg" ? "1rem" : "0.875rem",
+          }}
+          aria-hidden="true"
+        >
+          {equipped.face}
+        </span>
+      )}
     </div>
   )
 }
